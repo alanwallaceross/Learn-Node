@@ -6,12 +6,12 @@ const uuid = require("uuid");
 
 const multerOptions = {
   storage: multer.memoryStorage(),
-  fileFilter(req, file, next) {
+  fileFilter: function (req, file, next) {
     const isPhoto = file.mimetype.startsWith("image/");
     if (isPhoto) {
       next(null, true);
     } else {
-      next({ message: "That filetype isn't allowed!" }, false);
+      next({ message: "That filetype isn't allowed" }, false);
     }
   },
 };
@@ -29,7 +29,7 @@ exports.upload = multer(multerOptions).single("photo");
 exports.resize = async (req, res, next) => {
   // check if there is no new file to resize
   if (!req.file) {
-    next(); // skip to the next middleware
+    next();
     return;
   }
   const extension = req.file.mimetype.split("/")[1];
@@ -43,6 +43,7 @@ exports.resize = async (req, res, next) => {
 };
 
 exports.createStore = async (req, res) => {
+  req.body.author = req.user._id;
   const store = await new Store(req.body).save();
   req.flash(
     "success",
@@ -54,14 +55,22 @@ exports.createStore = async (req, res) => {
 exports.getStores = async (req, res) => {
   // 1. Query the database for a list of all stores
   const stores = await Store.find();
+
   res.render("stores", { title: "Stores", stores });
+};
+
+const confirmOwner = (store, user) => {
+  if (!store.author.equals(user._id)) {
+    throw Error("You must own a store in order to edit it!");
+  }
 };
 
 exports.editStore = async (req, res) => {
   // 1. Find the store given the ID
   const store = await Store.findOne({ _id: req.params.id });
+
   // 2. confirm they are the owner of the store
-  // TODO
+  confirmOwner(store, req.user);
   // 3. Render out the edit form so the user can update their store
   res.render("editStore", { title: `Edit ${store.name}`, store });
 };
@@ -72,12 +81,81 @@ exports.updateStore = async (req, res) => {
   // find and update the store
   const store = await Store.findOneAndUpdate({ _id: req.params.id }, req.body, {
     new: true, // return the new store instead of the old one
-    runValidators: true,
+    runValidators: true, //force validatores to run against edited values
   }).exec();
+
+  console.log(store);
+  // Redirect them the store and tell them it worked
   req.flash(
     "success",
-    `Successfully updated <strong>${store.name}</strong>. <a href="/store/${store.slug}">View Store →</a>`
+    `Successfully updated <strong>${store.name}</strong>. <a href="/store/${store.slug}">View Store =></a>`
   );
-  res.redirect(`/store/${store._id}/edit`);
-  // Redriect them the store and tell them it worked
+  res.redirect(`/store/${store.id}/edit`);
+};
+
+exports.getStoreBySlug = async (req, res, next) => {
+  const store = await Store.findOne({
+    slug: req.params.slug,
+  }).populate("author");
+  if (!store) {
+    return next();
+  }
+  res.render("store", { store, title: store.name });
+};
+
+exports.getStoresByTag = async (req, res, next) => {
+  const tag = req.params.tag;
+  const tagQuery = tag || undefined;
+  const tagsPromise = Store.getTagsList();
+
+  const storesPromise = tagQuery
+    ? Store.find({ tags: tagQuery })
+    : Store.find();
+
+  const [tags, stores] = await Promise.all([tagsPromise, storesPromise]);
+  // res.json(tags, stores);
+  res.render("tag", { tags, title: "Tags", tag, stores });
+};
+
+exports.searchStores = async (req, res) => {
+  const stores = await Store.find(
+    {
+      $text: {
+        $search: req.query.q,
+      },
+    },
+    {
+      score: { $meta: "textScore" },
+    }
+  )
+    .sort({
+      score: { $meta: "textScore" },
+    })
+    .limit(5);
+
+  res.json(stores);
+};
+
+exports.mapStores = async (req, res) => {
+  const coordinates = [req.query.lng, req.query.lat].map(parseFloat);
+  const q = {
+    location: {
+      $near: {
+        $geometry: {
+          type: "Point",
+          coordinates,
+        },
+        $maxDistance: 10000, //10km
+      },
+    },
+  };
+
+  const stores = await Store.find(q)
+    .select("slug name description location photo")
+    .limit(10);
+  res.json(stores);
+};
+
+exports.mapPage = async (req, res) => {
+  res.render("map", { title: "Map" });
 };
