@@ -6,12 +6,12 @@
     "node": ">= 7.6.0"
   },
   "scripts": {
-    "start": "node ./start.js",
-    "watch": "nodemon ./start.js --ignore public/",
+    "start": "node ./dang-thats-delicious/start.js",
+    "watch": "nodemon ./dang-thats-delicious/start.js --ignore public/",
     "dev": "concurrently \"npm run watch\" \"npm run assets\" --names \"💻,📦\" --prefix name",
     "assets": "webpack -w --display-max-modules 0",
-    "sample": "node ./data/load-sample-data.js",
-    "blowitallaway": "node ./data/load-sample-data.js --delete"
+    "sample": "node ./dang-thats-delicious/data/load-sample-data.js",
+    "blowitallaway": "node ./dang-thats-delicious/data/load-sample-data.js --delete"
   },
   "browserslist": "last 3 versions",
   "dependencies": {
